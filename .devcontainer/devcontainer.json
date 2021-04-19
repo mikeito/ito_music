@@ -1,14 +1,24 @@
 {
-    "name": "flutter_docker",
-    "context": "..",
-    "dockerFile": "../Dockerfile",
-    "remoteUser": "developer",
-    "mounts": ["source=/dev/bus/usb,target=/dev/bus/usb,type=bind"],
-    "settings": {
-      "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "runArgs": ["--privileged"],
-    "extensions": ["dart-code.flutter"],
-    "workspaceMount": "source=${localWorkspaceFolder}/workspace,target=/home/developer/workspace,type=bind,consistency=delegated",
-    "workspaceFolder": "/home/developer/workspace"
-  }
+  "name": "flutter_docker",
+  "context": "..",
+  "dockerFile": "../Dockerfile",
+  "remoteUser": "developer",
+  "mounts": ["source=/dev/bus/usb,target=/dev/bus/usb,type=bind"],
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  "runArgs": [
+    "--privileged",
+    "--device",
+    "/dev/kvm",
+    "--device",
+    "/dev/dri:/dev/dri",
+    "-v",
+    "/tmp/.X11-unix:/tmp/.X11-unix",
+    "-e",
+    "DISPLAY"
+  ],
+  "extensions": ["dart-code.flutter"],
+  "workspaceMount": "source=${localWorkspaceFolder}/workspace,target=/home/developer/workspace,type=bind,consistency=delegated",
+	"workspaceFolder": "/home/developer/workspace"
+}

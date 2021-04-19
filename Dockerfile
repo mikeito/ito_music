@@ -1,34 +1,64 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
-# Prerequisites
-RUN apt update && apt install -y curl git unzip xz-utils zip libglu1-mesa openjdk-8-jdk wget
+ENV UID=1000
+ENV GID=1000
+ENV USER="developer"
+ENV JAVA_VERSION="8"
+ENV ANDROID_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-6609375_latest.zip"
+ENV ANDROID_VERSION="29"
+ENV ANDROID_BUILD_TOOLS_VERSION="29.0.3"
+ENV ANDROID_ARCHITECTURE="x86_64"
+ENV ANDROID_SDK_ROOT="/home/$USER/android"
+ENV FLUTTER_CHANNEL="stable"
+ENV FLUTTER_VERSION="2.0.3"
+ENV FLUTTER_URL="https://storage.googleapis.com/flutter_infra/releases/$FLUTTER_CHANNEL/linux/flutter_linux_$FLUTTER_VERSION-$FLUTTER_CHANNEL.tar.xz"
+ENV FLUTTER_HOME="/home/$USER/flutter"
+ENV FLUTTER_WEB_PORT="8090"
+ENV FLUTTER_DEBUG_PORT="42000"
+ENV FLUTTER_EMULATOR_NAME="flutter_emulator"
+ENV PATH="$ANDROID_SDK_ROOT/cmdline-tools/tools/bin:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/platforms:$FLUTTER_HOME/bin:$PATH"
 
-# Set up new user
-RUN useradd -ms /bin/bash developer
-USER developer
-WORKDIR /home/developer
+# install all dependencies
+ENV DEBIAN_FRONTEND="noninteractive"
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends openjdk-$JAVA_VERSION-jdk curl unzip sed git bash xz-utils libglvnd0 ssh xauth x11-xserver-utils libpulse0 libxcomposite1 libgl1-mesa-glx \
+  && rm -rf /var/lib/{apt,dpkg,cache,log}
 
-# Prepare Android directories and system variables
-RUN mkdir -p Android/sdk
-ENV ANDROID_SDK_ROOT /home/developer/Android/sdk
-RUN mkdir -p .android && touch .android/repositories.cfg
+# create user
+RUN groupadd --gid $GID $USER \
+  && useradd -s /bin/bash --uid $UID --gid $GID -m $USER
 
-# Set up Android SDK
-RUN wget -O sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
-RUN unzip sdk-tools.zip && rm sdk-tools.zip
-RUN mv tools Android/sdk/tools
-RUN cd Android/sdk/tools/bin && yes | ./sdkmanager --licenses
-RUN cd Android/sdk/tools/bin && ./sdkmanager "build-tools;29.0.2" "patcher;v4" "platform-tools" "platforms;android-29" "sources;android-29"
-ENV PATH "$PATH:/home/developer/Android/sdk/platform-tools"
+USER $USER
+WORKDIR /home/$USER
 
-# check git and increment buffer size
-RUN git --version
-RUN git config --global http.postBuffer 524288000
+# android sdk
+RUN mkdir -p $ANDROID_SDK_ROOT \
+  && mkdir -p /home/$USER/.android \
+  && touch /home/$USER/.android/repositories.cfg \
+  && curl -o android_tools.zip $ANDROID_TOOLS_URL \
+  && unzip -qq -d "$ANDROID_SDK_ROOT" android_tools.zip \
+  && rm android_tools.zip \
+  && mkdir -p $ANDROID_SDK_ROOT/cmdline-tools \
+  && mv $ANDROID_SDK_ROOT/tools $ANDROID_SDK_ROOT/cmdline-tools/tools \
+  && yes "y" | sdkmanager "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
+  && yes "y" | sdkmanager "platforms;android-$ANDROID_VERSION" \
+  && yes "y" | sdkmanager "platform-tools" \
+  && yes "y" | sdkmanager "emulator" \
+  && yes "y" | sdkmanager "system-images;android-$ANDROID_VERSION;google_apis_playstore;$ANDROID_ARCHITECTURE"
 
-# Download Flutter SDK
-# RUN git clone https://github.com/flutter/flutter.git
-RUN git clone https://github.com/flutter/flutter.git -b stable --depth 1
-ENV PATH "$PATH:/home/developer/flutter/bin"
+# flutter
+RUN curl -o flutter.tar.xz $FLUTTER_URL \
+  && mkdir -p $FLUTTER_HOME \
+  && tar xf flutter.tar.xz -C /home/$USER \
+  && rm flutter.tar.xz \
+  && flutter config --no-analytics \
+  && flutter precache \
+  && yes "y" | flutter doctor --android-licenses \
+  && flutter doctor \
+  && flutter emulators --create \
+  && flutter update-packages
 
-# Run basic check to download Dark SDK
-RUN flutter doctor
+COPY entrypoint.sh /usr/local/bin/
+COPY chown.sh /usr/local/bin/
+COPY flutter-android-emulator.sh /usr/local/bin/flutter-android-emulator
+ENTRYPOINT [ "/usr/local/bin/entrypoint.sh" ]
